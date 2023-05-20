@@ -5,9 +5,9 @@ account: lynnhuangpeilin
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 9152322
-bundleId: 7242958
+bundleId: 7242965
 url: https://lynnhuangpeilin.shinyapps.io/RxNorm/
-when: 1684626472.56783
-lastSyncTime: 1684626472.56784
+when: 1684626869.75337
+lastSyncTime: 1684626869.75338
 asMultiple: FALSE
 asStatic: FALSE

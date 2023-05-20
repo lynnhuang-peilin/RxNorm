@@ -24,7 +24,7 @@ package.check <- lapply(
 
 
 
-#上传数据ui
+# Upload ui
 ui_upload <- sidebarLayout(
   sidebarPanel(
     fileInput("file", "Data", buttonLabel = "Upload..."),
@@ -38,7 +38,7 @@ ui_upload <- sidebarLayout(
   )
 )
 
-##处理数据ui
+## Data manipulation ui
 ui_clean <- sidebarLayout(
   sidebarPanel(
     checkboxInput("snake", "Rename columns to snake case?"),
@@ -51,7 +51,7 @@ ui_clean <- sidebarLayout(
   )
 )
 
-##下载数据ui
+## Download ui
 ui_download <- fluidRow(
   column(width = 12, downloadButton("download", class = "btn-block"))
 )
