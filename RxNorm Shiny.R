@@ -7,10 +7,10 @@
 
 
 # Setup ###################################
-getwd()
 # First specify the packages of interest
 packages = c("tidyverse","jsonlite", "readxl","readr","curl","stringr",
-             "bit64","sqldf", "haven","httr","openxlsx","shiny")
+             "bit64","sqldf", "haven","httr","openxlsx","shiny","rsconnect")
+
 # Now load or install&load all
 package.check <- lapply(
   packages,
@@ -21,6 +21,7 @@ package.check <- lapply(
     }
   }
 )
+
 
 
 #上传数据ui
