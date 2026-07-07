@@ -7,20 +7,22 @@
 
 
 # Setup ###################################
-# First specify the packages of interest
-packages = c("tidyverse","jsonlite", "readxl","readr","curl","stringr",
-             "bit64","sqldf", "haven","httr","openxlsx","shiny","rsconnect")
 
-# Now load or install&load all
-package.check <- lapply(
-  packages,
-  FUN = function(x) {
-    if (!require(x, character.only = TRUE)) {
-      install.packages(x, dependencies = TRUE)
-      library(x, character.only = TRUE)
-    }
-  }
-)
+# Load library
+
+library(tidyverse)
+library(jsonlite)
+library(readxl)
+library(readr)
+library(curl)
+library(stringr)
+library(bit64)
+library(sqldf)
+library(haven)
+library(httr)
+library(openxlsx)
+library(shiny)
+library(rsconnect)
 
 
 
