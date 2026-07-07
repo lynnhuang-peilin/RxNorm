@@ -1,0 +1,408 @@
+---
+title: "RxNorm"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+
+lang: en
+output:
+  Gmisc::docx_document:
+    fig_caption: true
+---
+
+### Source: <https://rxnav.nlm.nih.gov/RxNormAPIs.html>
+
+| TTY  |               Name                |                                                                                               Example                                                                                                | Description                                                                                                                                                                                        |
+|:------------:|:------------:|:--------------------:|:----------------------|
+|  IN  |            Ingredient             |                                                                                              Fluoxetine                                                                                              | A compound or moiety that gives the drug its distinctive clinical properties. Ingredients generally use the United States Adopted Name (USAN).                                                     |
+| PIN  |        Precise Ingredient         |                                                                                       Fluoxetine Hydrochloride                                                                                       | A specified form of the ingredient that may or may not be clinically active. Most precise ingredients are salt or isomer forms                                                                     |
+| MIN  |       Multiple Ingredients        |                                                                                       Fluoxetine / Olanzapine                                                                                        | Two or more ingredients appearing together in a single drug preparation, created from SCDF. In rare cases when IN/PIN or PIN/PIN combinations of the same base ingredient exist, created from SCD. |
+| SCDC | Semantic Clinical Drug Component  |                                                                                          Fluoxetine 4 MG/ML                                                                                          | Ingredient + Strength                                                                                                                                                                              |
+| SCDF |    Semantic Clinical Drug Form    |                                                                                       Fluoxetine Oral Solution                                                                                       | Ingredient + Dose Form                                                                                                                                                                             |
+| SCDG | Semantic Clinical Dose Form Group |                                                                                       Fluoxetine Oral Product                                                                                        | Ingredient + Dose Form Group                                                                                                                                                                       |
+| SCD  |      Semantic Clinical Drug       |                                                                                   Fluoxetine 4 MG/ML Oral Solution                                                                                   | Ingredient + Strength + Dose Form                                                                                                                                                                  |
+| GPCK |           Generic Pack            |                                                           {11 (varenicline 0.5 MG Oral Tablet) / 42 (varenicline 1 MG Oral Tablet) } Pack                                                            | {# (Ingredient + Strength + Dose Form) / \# (Ingredient + Strength + Dose Form)} Pack                                                                                                              |
+|  BN  |            Brand Name             |                                                                                                Prozac                                                                                                | A proprietary name for a family of products containing a specific active ingredient.                                                                                                               |
+| SBDC |  Semantic Branded Drug Component  |                                                                                     Fluoxetine 4 MG/ML [Prozac]                                                                                      | Ingredient + Strength + Brand Name                                                                                                                                                                 |
+| SBDF |    Semantic Branded Drug Form     |                                                                                  Fluoxetine Oral Solution [Prozac]                                                                                   | Ingredient + Dose Form + Brand Name                                                                                                                                                                |
+| SBDG | Semantic Branded Dose Form Group  |                                                                                             Prozac Pill                                                                                              | Brand Name + Dose Form Group                                                                                                                                                                       |
+| SBD  |       Semantic Branded Drug       |                                                                              Fluoxetine 4 MG/ML Oral Solution [Prozac]                                                                               | Ingredient + Strength + Dose Form + Brand Name                                                                                                                                                     |
+| BPCK |          Brand Name Pack          | {12 (Ethinyl Estradiol 0.035 MG / Norethindrone 0.5 MG Oral Tablet) / 9 (Ethinyl Estradiol 0.035 MG / Norethindrone 1 MG Oral Tablet) / 7 (Inert Ingredients 1 MG Oral Tablet) } Pack [Leena 28 Day] | {# (Ingredient Strength Dose Form) / \# (Ingredient Strength Dose Form)} Pack [Brand Name]                                                                                                         |
+| PSN  |         Prescribable Name         |                                                                                          Leena 28 Day Pack                                                                                           | Synonym of another TTY, given for clarity and for display purposes in electronic prescribing applications. Only one PSN per concept.                                                               |
+|  SY  |              Synonym              |                                                                                     Prozac 4 MG/ML Oral Solution                                                                                     | Synonym of another TTY, given for clarity.                                                                                                                                                         |
+| TMSY |    Tall Man Lettering Synonym     |                                                                                FLUoxetine 10 MG Oral Capsule [PROzac]                                                                                | Tall Man Lettering synonym of another TTY, given to distinguish between commonly confused drugs.                                                                                                   |
+|  DF  |             Dose Form             |                                                                                            Oral Solution                                                                                             | See Appendix 2 for a full list of Dose Forms.                                                                                                                                                      |
+|  ET  |       Dose Form Entry Term        |                                                                                             Nasal Drops                                                                                              | Entry terms for dose forms (TTY=DF).                                                                                                                                                               |
+| DFG  |          Dose Form Group          |                                                                                             Oral Liquid                                                                                              | See Appendix 3 for a full list of Dose Form Groups.                                                                                                                                                |
+
+: RxNorm Term Types (TTY)
+
+## Setup
+
+Get directory
+
+```{r setup, eval=FALSE, include=TRUE, encoding = "UTF-8"}
+getwd()
+setwd("/Users/lynn/Dropbox (UFL)/FL Medicaid/FL Medicaid data/HCV_OneFL_Lynn/")
+setwd("C:\\Users\\peilinhuang\\Dropbox (UFL)\\Lynn Huang\\R")
+
+
+# First specify the packages of interest
+packages = c("jsonlite", "readxl","readr","curl","tidyverse","stringr","xlsx","xlsx",
+             "XLConnect","bit64","sqldf", "haven","httr")
+
+
+# Now load or install&load all
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+```
+
+## NDC to Drug Name
+
+Using RxNorm API to transform pre-defined NDC code into drug name.
+
+```{r NDC_to_DrugName, eval=FALSE, include=TRUE}
+# Input
+
+# Example
+# NDCpath <- "/Users/peilinhuang/Dropbox (UFL)/Lynn Huang/Rxmix/11DigitNDC.xlsx"
+# Outputpath <- "/Users/peilinhuang/Dropbox (UFL)/Lynn Huang/Rxmix/NDC_Name_r.xlsx"
+
+NDCpath <- "/Users/peilinhuang/Dropbox (UFL)/Analysts shared folder/OneFL/OneFL_Lynn/OneFL_Phar_NDC.xlsx"
+Outputpath <- "/Users/peilinhuang/Dropbox (UFL)/Analysts shared folder/OneFL/OneFL_Lynn/OneFL_Phar_NDC.xlsx"
+
+# Create function
+NDC_to_DrugName <- function(NDC){
+  # Find Rxcui By NDC
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui.json?idtype=NDC&id=", NDC)
+  RxCUI <- content(GET(url = path))$idGroup$rxnormId[[1]]
+  RxCUI
+  # Get Names By RxCUI
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui/", RxCUI, "/allProperties.json?prop=names")
+  Drug_Name <- content(GET(url = path))$propConceptGroup$propConcept[[1]][["propValue"]]
+  Drug_Name <- ifelse(is.null(Drug_Name),"",Drug_Name)
+  return(Drug_Name)
+}
+# Test the function
+NDC_to_DrugName("00310620530")
+
+# Import NDC list
+NDClist <- read_excel(NDCpath)
+class(NDClist$NDC)
+NDClist$NDC <- sprintf("%011d", as.numeric(NDClist$NDC))
+# NDClist$NDC <- stringr::str_pad(NDClist$NDC, 11, side="left", pad="0")
+
+# Apply the function
+DrugName <- data.frame(Drug_Name=apply(NDClist, 1, NDC_to_DrugName))
+Output <- cbind(NDClist,DrugName)
+
+# Save the Output
+write.xlsx(Output, file=Outputpath, sheetName="NDC_DrugName", row.names=FALSE)
+```
+
+## ATC to RxCUI
+
+```{r ATC_to_RxCUI, eval=FALSE, include=TRUE}
+# ATC to RxCUI --------------------------------------------------------
+
+# Input
+ATCpath <- "/Users/peilinhuang/Dropbox (UFL)/Lynn Huang/Rxmix/ATC_GLP1.xlsx"
+Outputpath <- "/Users/peilinhuang/Dropbox (UFL)/Lynn Huang/Rxmix/NDC_GLP1.xlsx"
+
+# Create function
+ATC_to_RxCUI <- function(ATC){
+  # Find Rxcui By ATC
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui.json?idtype=ATC&id=", ATC)
+  RxCUI <- content(GET(url = path))$idGroup$rxnormId[[1]]
+  # Get Related By RxCUI
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui/", RxCUI, "/related,json?tty=IN+SCD+SCDC+SBD+SBDC")
+  b <- data.frame(matrix(ncol = 7, nrow = 0))
+  colnames(b) <- c("rxcui", "name", "synonym", "tty", "language", "suppress", "umlscui")
+  for (i in 1:5){
+    max <- length(content(GET(url = path))$relatedGroup$conceptGroup[[i]]$conceptProperties)
+    for (j in 1:max){
+      a <- data.frame(content(GET(url = path))$relatedGroup$conceptGroup[[i]]$conceptProperties[[j]])
+      b <- rbind(b,a)
+    }
+  }
+  b <- cbind(b, "ATC"=ATC)
+  b
+
+}
+
+# Test the function
+ATC_to_RxCUI("A10BK01")
+
+# Import ATC list
+ATClist <- read_excel(ATCpath)
+ATClist$ATC <- str_trim(ATClist$ATC)
+ATClist <- unlist(ATClist[,1])
+
+# Apply the function
+list <- lapply(ATClist, ATC_to_NDC)
+Output <- data.frame(matrix(ncol = 8, nrow = 0))
+colnames(Output) <- c("rxcui", "name", "synonym", "tty", "language", "suppress", "umlscui","ATC")
+for (i in 1:length(list)){
+  Output <- rbind(Output, list[[i]])
+}
+
+# Save the Output
+write.xlsx(Output, file=Outputpath, sheetName="sheet1", row.names=FALSE)
+```
+
+## ATC to NDC
+
+```{r ATC_to_NDC, eval=FALSE, include=TRUE}
+# ATC to NDC --------------------------------------------------------
+
+# Input
+ATCpath <- "/Users/peilinhuang/Dropbox (UFL)/Lynn Huang/R/ATC_DOAC.xlsx"
+Outputpath <- "/Users/peilinhuang/Dropbox (UFL)/Lynn Huang/R/NDC_DOAC.xlsx"
+
+# Create function
+ATC_to_NDC <- function(ATC){
+  # Find Rxcui By ATC
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui.json?idtype=ATC&id=", ATC)
+  RxCUI <- content(GET(url = path))$idGroup$rxnormId[[1]]
+  # Get Related By RxCUI
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui/", RxCUI, "/related,json?tty=IN+SCD+SCDC+SBD+SBDC")
+  b <- data.frame(matrix(ncol = 7, nrow = 0))
+  colnames(b) <- c("rxcui", "name", "synonym", "tty", "language", "suppress", "umlscui")
+  for (i in 1:5){
+    max <- length(content(GET(url = path))$relatedGroup$conceptGroup[[i]]$conceptProperties)
+    for (j in 1:max){
+      a <- data.frame(content(GET(url = path))$relatedGroup$conceptGroup[[i]]$conceptProperties[[j]])
+      b <- rbind(b,a)
+    }
+  }
+  b <- cbind(b, "ATC"=ATC)
+  # Get NDC By RxCUI
+  c <- data.frame(matrix(ncol = 4, nrow = 0))
+  colnames(c) <- c("ndc", "rxcui","name","ATC")
+
+  for (k in 1:nrow(b)) {
+    rxcui <- b[k,"rxcui"]
+    name <- b[k,"name"]
+    ATC <- b[k,"ATC"]
+    path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui/", rxcui, "/allhistoricalndcs.json")
+    max <- length(content(GET(url = path))$historicalNdcConcept$historicalNdcTime[[1]]$ndcTime)
+    for (l in 1:max) {
+      if (is.null(content(GET(url = path))$historicalNdcConcept)) {
+      } else {
+        d <- data.frame("ndc"=content(GET(url = path))$historicalNdcConcept$historicalNdcTime[[1]]$ndcTime[[l]]$ndc[[1]],
+                        "rxcui"=rxcui,"name"=name,"ATC"=ATC)
+        c <- rbind(c,d)
+      }
+    }
+  }
+  c
+}  
+
+# Test the function
+# ATC_to_NDC("A10BK01")
+
+# Import ATC list
+ATClist <- read_excel(ATCpath)
+ATClist$ATC <- str_trim(ATClist$ATC)
+ATClist <- unlist(ATClist[,1])
+
+# Apply the function 
+list <- lapply(ATClist, ATC_to_NDC)
+Output <- data.frame(matrix(ncol = 4, nrow = 0))
+colnames(Output) <- c("ndc", "rxcui","name","ATC")
+for (i in 1:length(list)){
+  Output <- rbind(Output, list[[i]])
+}
+
+# Save the Output
+write.xlsx(Output, file=Outputpath, sheetName="sheet1", row.names=FALSE)
+```
+
+## NDC to RxCUI
+
+Using RxNorm API to transform pre-defined NDC code into RxCUI.
+
+```{r NDC_to_RxCUI, eval=FALSE, include=TRUE}
+# Input
+
+NDCpath <- "/Users/lynn/Dropbox (UFL)/FL Medicaid/FL Medicaid data/HCV_OneFL_Lynn/HCV_FL_NDC.xlsx"
+Outputpath <- "/Users/lynn/Dropbox (UFL)/FL Medicaid/FL Medicaid data/HCV_OneFL_Lynn/HCV_FL_NDC.xlsx"
+NDClist <- read_excel(NDCpath)
+NDClist$NDC <- sort(unique(NDClist$NDC))
+NDClist$NDC <- str_pad(NDClist$NDC, 11, side = "left", "0")
+
+# Create function
+NDC_to_RxCUI <- function(NDC){
+  # Find Rxcui By NDC
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui.json?idtype=NDC&id=", NDC)
+  RxCUI <- content(GET(url = path))$idGroup$rxnormId[[1]]
+  RxCUI <- ifelse(is.null(RxCUI),"",RxCUI)
+  RxCUI
+}
+# Test the function
+NDC_to_RxCUI("00310620530")
+NDC_to_RxCUI("00004000512")
+NDC_to_RxCUI("76519117002")
+NDC_to_RxCUI("00024027404")
+
+
+
+# Import NDC list
+NDClist <- read_excel(NDCpath)
+NDClist$NDC <- sort(unique(NDClist$NDC))
+NDClist$NDC <- str_pad(NDClist$NDC, 11, side = "left", "0")
+# NDClist$NDC <- stringr::str_pad(NDClist$NDC, 11, side="left", pad="0")
+
+
+# Apply the function
+RxCUI <- data.frame(RxCUI=apply(NDClist[,c("NDC")], 1, NDC_to_RxCUI))
+Output <- cbind(NDClist,RxCUI)
+
+# Save the Output
+write.xlsx(Output, file=Outputpath, sheetName="NDC_to_RxCUI", row.names=FALSE)
+
+```
+
+## NDC to Strength
+
+```{r NDC_to_Strength, eval=FALSE, include=TRUE}
+# Input
+
+NDCpath <- "C:/Users/peilinhuang/Desktop/11DigitNDC.xlsx"
+Outputpath <- "C:/Users/peilinhuang/Desktop/Output.xlsx"
+
+# Create function
+NDC_to_Strength <- function(NDC){
+  # Find Rxcui By NDC
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui.json?idtype=NDC&id=", NDC)
+  RxCUI <- content(GET(url = path))$idGroup$rxnormId[[1]]
+  if (is.null(RxCUI)) {
+      Strength <- ""
+      } else {
+        # Get Strength By RxCUI
+        path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui/", RxCUI, "/allProperties.json?prop=ATTRIBUTES")
+        temp <- matrix(unlist(content(GET(url = path))$propConceptGroup$propConcept),nrow=3)
+        colnames(temp) <-temp[2,]
+        temp <- data.frame(temp)[3,]
+        Strength <- temp$AVAILABLE_STRENGTH
+        Strength <- ifelse(is.null(Strength),"",Strength)
+      }
+  return(Strength)
+}
+# Test the function
+NDC_to_Strength("17856355504")
+NDC_to_Strength("00004000512")
+NDC_to_Strength("00093613832")
+
+
+# Import NDC list
+NDClist <- read_excel(NDCpath)
+NDClist$NDC <- str_pad(NDClist$NDC, 11, side = "left", "0")
+# NDClist$NDC <- stringr::str_pad(NDClist$NDC, 11, side="left", pad="0")
+
+# Apply the function
+Strength <- data.frame(Strength=apply(NDClist, 1, NDC_to_Strength))
+Output <- cbind(NDClist,Strength)
+
+# Save the Output
+write.xlsx(Output, file=Outputpath, sheetName="sheet1", row.names=FALSE)
+
+```
+
+## NDC to Porperties
+
+```{r NDC_to_Porperties, eval=FALSE, include=TRUE}
+
+# Input
+
+NDCpath     <- "/Users/peilinhuang/Dropbox (UFL)/Lynn Huang/Rxmix/11DigitNDC/11DigitNDC.xlsx"
+Outputpath  <- "C:/Users/peilinhuang/Desktop/Output.xlsx"
+Property    <- sort(c("NDC","RxCUI","TTY", "AVAILABLE_STRENGTH","STRENGTH","RxNorm Name","QUANTITY"))
+Property
+# Create function
+NDC_to_Porperties <- function(NDC,Property){
+  # Find Rxcui By NDC
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui.json?idtype=NDC&id=", NDC)
+  RxCUI <- content(GET(url = path))$idGroup$rxnormId[[1]]
+  if (is.null(RxCUI)) {
+      temp3 <- matrix(, nrow=1, ncol=length(Property))
+      } else {
+        # Get Properties By RxCUI
+        path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui/", RxCUI,"/allProperties.json?prop=NAMES+ATTRIBUTES")
+        temp <- matrix(unlist(content(GET(url = path))$propConceptGroup$propConcept),nrow=3)
+        temp <- t(cbind(c("NDC",NDC),c("RxCUI",RxCUI),temp[2:3,]))
+        temp2 <- matrix(Property, nrow = length(Property), byrow = TRUE)
+        temp3 <- t(merge(x=temp2,y=temp,by="V1",all.x=TRUE))[2,]
+      }
+  return(temp3)
+}
+
+# Test the function
+
+a <- NDC_to_Porperties("00310620530",Property)
+b <- NDC_to_Porperties("00004000512",Property)
+c <- NDC_to_Porperties("00093613832",Property)
+d <- NDC_to_Porperties("00002144561",Property)
+NDC_to_Porperties("00310620530",Property)
+
+# Import NDC list
+NDClist <- read_excel(NDCpath)
+NDClist$NDC <- str_pad(NDClist$NDC, 11, side = "left", "0")
+NDClist <- NDClist[1:10,]
+
+# Apply the function
+Property_list<- lapply(unlist(NDClist), function(x)NDC_to_Porperties(x,Property))
+
+Output <- matrix(Property,nrow=1, ncol =length(Property))
+
+for (i in 1:nrow(NDClist)){
+  Output <- rbind(Output,matrix(Property_list[[i]],nrow=1, ncol =length(Property)))
+}
+Output <- data.frame(Output)[-1,]
+colnames(Output) <- Property
+
+# Save the Output
+write.xlsx(Output, file=Outputpath, sheetName="sheet1", row.names=FALSE)
+```
+
+```{r}
+# find RXCUI BY STRING
+# Hydrocodone
+
+# Input
+
+NDCpath     <- "/Users/peilinhuang/Dropbox (UFL)/Lynn Huang/Rxmix/11DigitNDC/11DigitNDC.xlsx"
+Outputpath  <- "C:/Users/peilinhuang/Desktop/Output.xlsx"
+Property    <- sort(c("NDC","RxCUI","TTY", "AVAILABLE_STRENGTH","STRENGTH","RxNorm Name","QUANTITY"))
+
+path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui.json?name=hydrocodone&allsrc=0&search=2")
+df <- content(GET(url = path))
+RXCUI <- 
+
+# Test the function
+NDC_to_Porperties <- function(NDC,Property){
+  # Find Rxcui By NDC
+  path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui.json?name=",DrugName,"&allsrc=0&search=2", )
+  RxCUI <- content(GET(url = path))$idGroup$rxnormId[[1]]
+  if (is.null(RxCUI)) {
+      temp3 <- matrix(, nrow=1, ncol=length(Property))
+      } else {
+        # Get Properties By RxCUI
+        path <- str_c("https://rxnav.nlm.nih.gov/REST/rxcui/", RxCUI,"/allProperties.json?prop=NAMES+ATTRIBUTES")
+        temp <- matrix(unlist(content(GET(url = path))$propConceptGroup$propConcept),nrow=3)
+        temp <- t(cbind(c("NDC",NDC),c("RxCUI",RxCUI),temp[2:3,]))
+        temp2 <- matrix(Property, nrow = length(Property), byrow = TRUE)
+        temp3 <- t(merge(x=temp2,y=temp,by="V1",all.x=TRUE))[2,]
+      }
+  return(temp3)
+}
+
+```
