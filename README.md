@@ -12,11 +12,6 @@ Live app: https://lynnhuangpeilin.shinyapps.io/RxNorm/
 
 All three tabs support downloading results as CSV.
 
-## Files
-
-- `RxNorm Shiny.R` — the app (UI + server + RxNorm API helper functions). This is the file deployed to shinyapps.io.
-- `RxNorm.Rmd` — original notebook where the underlying API functions were prototyped against local files.
-
 ## Running locally
 
 ```r
@@ -24,12 +19,6 @@ install.packages(c("shiny", "httr", "jsonlite", "stringr", "DT", "readxl", "read
 shiny::runApp("RxNorm Shiny.R")
 ```
 
-## Deploying to shinyapps.io
+## Data source
 
-This repo is already linked to the `RxNorm` app under the `lynnhuangpeilin` shinyapps.io account (see `rsconnect/documents/`). To push an update, open the project in RStudio and run:
-
-```r
-rsconnect::deployApp(appFiles = "RxNorm Shiny.R", appName = "RxNorm")
-```
-
-or click **Publish** on the app in RStudio's Viewer pane. Make sure the packages listed above are installed locally first — `rsconnect` bundles them automatically based on what the script `library()`s.
+All lookups are powered by the National Library of Medicine's [RxNorm REST API](https://rxnav.nlm.nih.gov/RxNormAPIs.html), a standardized nomenclature for clinical drugs.
