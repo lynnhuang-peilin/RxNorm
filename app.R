@@ -62,15 +62,26 @@ rx_fetch <- function(urls, label = "Fetching") {
         req_retry(max_tries = 3,
                   is_transient = function(r) resp_status(r) %in% c(429, 500, 502, 503, 504))
     })
-    resps <- req_perform_parallel(reqs, max_active = 5, on_error = "continue", progress = FALSE)
+    resps <- if ("max_active" %in% names(formals(req_perform_parallel))) {
+      req_perform_parallel(reqs, max_active = 5, on_error = "continue", progress = FALSE)
+    } else {
+      req_perform_parallel(reqs, on_error = "continue", progress = FALSE)
+    }
     for (k in seq_along(idx)) {
       r <- resps[[k]]
       ok <- inherits(r, "httr2_response") && resp_status(r) == 200
       val <- if (ok) tryCatch(resp_body_json(r, simplifyVector = FALSE), error = function(e) NULL) else NULL
-      if (!is.null(val)) assign(todo[idx[k]], val, envir = .cache)  # never cache failures
+      if (!is.null(val)) {
+        assign(todo[idx[k]], val, envir = .cache)
+      } else {                      # never cache failures
+        .state$failed <- (.state$failed %||% 0L) + 1L
+        code <- if (inherits(r, "httr2_response")) resp_status(r) else class(r)[1]
+        message("[rxnorm] FAILED (", code, "): ", todo[idx[k]])
+      }
     }
     i <- max(idx) + 1
     set_detail(sprintf("%s: %d / %d", label, min(i - 1, n), n))
+    message(sprintf("[rxnorm] %s: %d / %d", label, min(i - 1, n), n))
     if (i <= n) Sys.sleep(PAUSE)
   }
   lapply(urls, get0, envir = .cache, inherits = FALSE)
@@ -296,7 +307,7 @@ input_ui <- function(id, label, placeholder) {
 input_server <- function(id) {
   moduleServer(id, function(input, output, session) {
     up <- reactive({
-      req(input$file)
+      if (is.null(input$file)) return(NULL)   # no upload: typed input only (req() here would silently block everything)
       ext <- tolower(tools::file_ext(input$file$name))
       tryCatch(
         if (ext == "csv") read_csv(input$file$datapath, col_types = cols(.default = "c"), show_col_types = FALSE)
@@ -372,11 +383,13 @@ ui <- page_navbar(
                            selected = c("SCD", "SBD")),
         checkboxInput("human_only", "Human drugs only", TRUE),
         checkboxInput("want_ndc", "Include NDCs (one extra call per product)", TRUE),
+        numericInput("max_prod", "Safety cap on products (narrow the query if exceeded)", 500, min = 10, max = 5000, step = 50),
         radioButtons("ndc_mode", "NDC scope",
-                     choices = c("Currently associated" = "current", "All ever associated (with dates)" = "history")),
+                     choices = c("Currently associated" = "current", "All ever associated (with dates)" = "history"),
+                     selected = "current"),
         actionButton("run1", "Search", class = "btn-primary w-100")
       ),
-      uiOutput("sum1"),
+      uiOutput("status1"),
       download_buttons("dl1"),
       DTOutput("tbl1")
     )
@@ -389,6 +402,7 @@ ui <- page_navbar(
         input_ui("p2", "NDC codes", "11 digits, or hyphenated (5-4-2, 5-3-2, 4-4-2)"),
         actionButton("run2", "Look up", class = "btn-primary w-100")
       ),
+      uiOutput("status2"),
       download_buttons("dl2"),
       DTOutput("tbl2")
     )
@@ -403,6 +417,7 @@ ui <- page_navbar(
         checkboxInput("want_ndc3", "Include current NDCs", FALSE),
         actionButton("run3", "Search", class = "btn-primary w-100")
       ),
+      uiOutput("status3"),
       download_buttons("dl3"),
       DTOutput("tbl3")
     )
@@ -423,34 +438,87 @@ ui <- page_navbar(
 )
 
 # ---- server -----------------------------------------------------------------------
+# Runs `fn()` with progress + visible status. fn returns a data frame (or NULL after
+# setting .state$msg). Errors are shown in the page and written to the app log.
+run_job <- function(result, status, fn) {
+  result(NULL)
+  status(list(type = "info", text = "Running... large queries can take a few minutes."))
+  .state$failed <- 0L
+  .state$msg <- NULL
+  out <- tryCatch(
+    withProgress(message = "Querying RxNorm", value = 0.5, fn()),
+    error = function(e) {
+      message("[rxnorm] ERROR: ", conditionMessage(e))
+      .state$msg <- paste("Error:", conditionMessage(e))
+      NULL
+    }
+  )
+  failed <- .state$failed %||% 0L
+  if (is.null(out) || !nrow(out)) {
+    txt <- .state$msg %||% "No results."
+    if (failed > 0) txt <- paste0(txt, sprintf(" (%d API calls failed; NLM may be rate-limiting or unreachable)", failed))
+    status(list(type = if (grepl("^Error", txt)) "danger" else "warning", text = txt))
+  } else {
+    result(out)
+    txt <- sprintf("%s rows.", format(nrow(out), big.mark = ","))
+    if ("ndc_11" %in% names(out)) {
+      txt <- sprintf("%s rows | %s products | %s NDCs.", format(nrow(out), big.mark = ","),
+                     format(n_distinct(out$rxcui), big.mark = ","),
+                     format(n_distinct(out$ndc_11, na.rm = TRUE), big.mark = ","))
+    }
+    if (failed > 0) txt <- paste0(txt, sprintf(" Warning: %d API calls failed, so results may be incomplete; try again.", failed))
+    status(list(type = if (failed > 0) "warning" else "success", text = txt))
+  }
+  invisible(NULL)
+}
+
+render_status <- function(status) {
+  renderUI({
+    s <- status()
+    if (is.null(s)) return(NULL)
+    div(class = paste0("alert alert-", s$type, " py-2"), s$text)
+  })
+}
+
 server <- function(input, output, session) {
   t1 <- input_server("p1")
   t2 <- input_server("p2")
   t3 <- input_server("p3")
 
+  res1 <- reactiveVal(NULL); st1 <- reactiveVal(NULL)
+  res2 <- reactiveVal(NULL); st2 <- reactiveVal(NULL)
+  res3 <- reactiveVal(NULL); st3 <- reactiveVal(NULL)
+  output$status1 <- render_status(st1)
+  output$status2 <- render_status(st2)
+  output$status3 <- render_status(st3)
+
   # Tab 1 ------------------------------------------------------------------
-  res1 <- eventReactive(input$run1, {
-    terms <- t1()
-    validate(need(length(terms) > 0, "Enter at least one generic name or ATC code."))
-    validate(need(length(input$tty) > 0, "Select at least one product type."))
-    run_safely(withProgress(message = "Searching RxNorm", value = 0.5, (function() {
+  observeEvent(input$run1, {
+    run_job(res1, st1, function() {
+      terms <- t1()
+      if (!length(terms)) { .state$msg <- "Enter at least one generic name or ATC code."; return(NULL) }
+      if (!length(input$tty)) { .state$msg <- "Select at least one product type."; return(NULL) }
+      message("[rxnorm] tab1 terms: ", paste(terms, collapse = ", "))
       is_atc <- str_detect(terms, ATC_REGEX)
       ing <- bind_rows(
         if (any(is_atc))  atc_members(terms[is_atc]),
         if (any(!is_atc)) name_ingredients(terms[!is_atc])
       )
-      if (!nrow(ing)) {
-        showNotification("No ingredients found for those inputs.", type = "warning"); return(NULL)
-      }
+      if (!nrow(ing)) { .state$msg <- "No ingredients found for those inputs."; return(NULL) }
       rel <- rel_concepts(ing$ingredient_rxcui, input$tty, "Products")
       prod <- ing |>
         inner_join(rel, by = c("ingredient_rxcui" = "src_rxcui"), relationship = "many-to-many") |>
         distinct()
-      if (!nrow(prod)) {
-        showNotification("Ingredients found, but no products of the selected types.", type = "warning"); return(NULL)
+      if (!nrow(prod)) { .state$msg <- "Ingredients found, but no products of the selected types."; return(NULL) }
+      cap <- input$max_prod %||% 500
+      if (n_distinct(prod$rxcui) > cap) {
+        .state$msg <- sprintf("Found %s products, above the safety cap of %s. Narrow the query (e.g. a 5-character ATC code or one ingredient), untick product types, or raise the cap.",
+                              format(n_distinct(prod$rxcui), big.mark = ","), format(cap, big.mark = ","))
+        return(NULL)
       }
       prod <- prod |> left_join(enrich_concepts(prod$rxcui), by = "rxcui") |> finish_products()
       if (input$human_only) prod <- filter(prod, human_drug %in% TRUE)
+      if (!nrow(prod)) { .state$msg <- "No human-drug products (untick 'Human drugs only' to see all)."; return(NULL) }
       if (input$want_ndc) {
         prod <- add_ndcs(prod, input$ndc_mode)
       } else {
@@ -460,25 +528,16 @@ server <- function(input, output, session) {
       prod |>
         select(any_of(PRODUCT_COLS), everything(), -any_of(c("components", "ingredients"))) |>
         arrange(query, ingredient, tty, name, ndc_11)
-    })()))
-  })
-
-  output$sum1 <- renderUI({
-    d <- res1(); req(d)
-    div(class = "mb-2 text-muted",
-        sprintf("%s ingredients | %s products | %s NDCs",
-                format(n_distinct(d$ingredient_rxcui), big.mark = ","),
-                format(n_distinct(d$rxcui), big.mark = ","),
-                format(n_distinct(d$ndc_11, na.rm = TRUE), big.mark = ",")))
+    })
   })
   output$tbl1 <- renderDT({ d <- res1(); req(d); show_table(d) })
   download_server("dl1", function() req(res1()), "rxnorm_products")
 
   # Tab 2 ------------------------------------------------------------------
-  res2 <- eventReactive(input$run2, {
-    raw <- t2()
-    validate(need(length(raw) > 0, "Enter at least one NDC."))
-    run_safely(withProgress(message = "Looking up NDCs", value = 0.5, {
+  observeEvent(input$run2, {
+    run_job(res2, st2, function() {
+      raw <- t2()
+      if (!length(raw)) { .state$msg <- "Enter at least one NDC."; return(NULL) }
       keyed <- tibble(ndc_input = raw, ndc_11 = normalize_ndc(raw))
       ok <- filter(keyed, !is.na(ndc_11))
       st <- tibble(ndc_11 = character(), ndc_status = character(), rxcui = character())
@@ -504,16 +563,16 @@ server <- function(input, output, session) {
                              ifelse(is.na(rxcui), "No RxNorm concept for this NDC", NA_character_))) |>
         select(ndc_input, ndc_11, ndc_formatted, ndc_status, rxcui, tty, bn, gnn, name,
                dosage_form, strength, strength_num, strength_unit, ingredient = ingredients, human_drug, note)
-    }))
+    })
   })
   output$tbl2 <- renderDT({ d <- res2(); req(d); show_table(d) })
   download_server("dl2", function() req(res2()), "ndc_lookup")
 
   # Tab 3 ------------------------------------------------------------------
-  res3 <- eventReactive(input$run3, {
-    terms <- t3()
-    validate(need(length(terms) > 0, "Enter at least one drug name."))
-    run_safely(withProgress(message = "Searching names", value = 0.5, (function() {
+  observeEvent(input$run3, {
+    run_job(res3, st3, function() {
+      terms <- t3()
+      if (!length(terms)) { .state$msg <- "Enter at least one drug name."; return(NULL) }
       res <- rx_fetch(sprintf("%s/approximateTerm.json?term=%s&maxEntries=%d&option=1",
                               BASE, map_chr(terms, enc), as.integer(input$maxn)), "Approximate match")
       cand <- map2_dfr(terms, res, function(t, r) {
@@ -522,7 +581,7 @@ server <- function(input, output, session) {
                                        score = suppressWarnings(as.numeric(c$score %||% NA)),
                                        rank  = suppressWarnings(as.integer(c$rank %||% NA))))
       })
-      if (!nrow(cand)) { showNotification("No matches.", type = "warning"); return(NULL) }
+      if (!nrow(cand)) { .state$msg <- "No matches."; return(NULL) }
       cand <- cand |> group_by(term, rxcui) |> slice_max(score, n = 1, with_ties = FALSE) |> ungroup()
       info <- props_tbl(cand$rxcui, "Concept names") |> left_join(enrich_concepts(cand$rxcui), by = "rxcui")
       out <- cand |> left_join(info, by = "rxcui") |>
@@ -533,7 +592,7 @@ server <- function(input, output, session) {
                         "strength_num", "strength_unit", "ndc_11", "ndc_formatted")),
                ingredient = ingredients, human_drug) |>
         arrange(term, desc(score))
-    })()))
+    })
   })
   output$tbl3 <- renderDT({ d <- res3(); req(d); show_table(d) })
   download_server("dl3", function() req(res3()), "drug_name_search")
