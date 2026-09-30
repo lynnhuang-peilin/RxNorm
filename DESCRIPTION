@@ -1,0 +1,17 @@
+Package: rxnormndc
+Title: RxNorm and ATC to NDC Explorer
+Version: 2.0.0
+Description: Shiny app for looking up drug products, strengths and NDCs from the NLM RxNorm API.
+License: MIT
+Imports:
+    shiny,
+    bslib,
+    httr2 (>= 1.0.0),
+    DT,
+    dplyr (>= 1.1.0),
+    purrr,
+    stringr,
+    tibble,
+    readr,
+    readxl,
+    openxlsx

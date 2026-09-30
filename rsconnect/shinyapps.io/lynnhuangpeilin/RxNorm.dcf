@@ -1,0 +1,11 @@
+name: RxNorm
+title: RxNorm
+username:
+account: lynnhuangpeilin
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 9152322
+bundleId: 12629898
+url: https://lynnhuangpeilin.shinyapps.io/RxNorm/
+asMultiple: FALSE
+asStatic: FALSE

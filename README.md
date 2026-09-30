@@ -1,24 +1,23 @@
-# RxNorm Lookup Tool
+# RxNorm / ATC to NDC explorer
 
-A Shiny app for looking up drug information via the [RxNorm REST API](https://rxnav.nlm.nih.gov/RxNormAPIs.html).
+Shiny app that turns generic names or ATC codes (any level, e.g. `N02A`, `N06AA`, `A10BK01`) into a product table: brand name (BN), generic name (GNN), ingredient, dosage form, strength, and NDCs (11-digit and 5-4-2). Data come live from the NLM RxNorm / RxClass REST APIs.
 
-Live app: https://lynnhuangpeilin.shinyapps.io/RxNorm/
+Tabs: **Name / ATC to NDC**, **NDC to drug info**, **Drug name search**. Inputs can be typed or uploaded (CSV/Excel). Results download as CSV or Excel.
 
-## Features
-
-- **NDC → Drug Info**: paste NDC codes (or upload a CSV/Excel file) and get back RxCUI, RxNorm name, term type (TTY), and available strength for each.
-- **ATC → RxCUI / NDC**: look up an ATC code, get related RxNorm concepts (ingredient, clinical drug, branded drug, etc.), and optionally expand to the full list of historical NDCs.
-- **Drug Name → RxCUI**: fuzzy-search a drug name to find matching RxCUIs.
-
-All three tabs support downloading results as CSV.
-
-## Running locally
-
+## Run locally
 ```r
-install.packages(c("shiny", "httr", "jsonlite", "stringr", "DT", "readxl", "readr"))
-shiny::runApp("RxNorm Shiny.R")
+install.packages(c("shiny","bslib","httr2","DT","dplyr","purrr","stringr","tibble","readr","readxl","openxlsx"))
+shiny::runApp()
 ```
 
-## Data source
+## Deploy
+Posit Connect Cloud: connect this repo, pick `app.R`.
+shinyapps.io from GitHub: add repo secrets `SHINYAPPS_NAME`, `SHINYAPPS_TOKEN`, `SHINYAPPS_SECRET` (shinyapps.io > Account > Tokens); pushes to `main` redeploy via `.github/workflows/deploy.yml`.
+Manual: `rsconnect::deployApp(appFiles = "app.R", appName = "RxNorm")`.
 
-All lookups are powered by the National Library of Medicine's [RxNorm REST API](https://rxnav.nlm.nih.gov/RxNormAPIs.html), a standardized nomenclature for clinical drugs.
+## Notes
+- Calls are made in parallel batches, cached for 24 h, and throttled below NLM's 20 requests/sec limit. Large ATC classes can take a few minutes.
+- `ingredient_strength` = strength of the searched ingredient (from SCDC components); `strength` = full product strength.
+- NDC scope: "currently associated" uses `/ndcs`; "all ever associated" uses `/allhistoricalndcs?history=1` and adds start/end dates.
+- Open CSVs with the NDC column imported as text, or use the Excel download, to keep leading zeros.
+- Research use only; not affiliated with NLM.
